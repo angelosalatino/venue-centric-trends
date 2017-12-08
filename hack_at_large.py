@@ -1,10 +1,11 @@
 
+import json
 import datetime
 from elasticsearch import Elasticsearch
 from elasticsearch.exceptions import RequestError
 
 
-TARGET_INDEX = "snhackday"
+TARGET_INDEX = "scigraph"
 
 
 def clean_string(string):
@@ -13,42 +14,26 @@ def clean_string(string):
 
 def main():
     es = Elasticsearch()
-    papers = {}
     with open('./query-result.tsv') as infile:
-        a = 0
         for line in infile:
-            # if a == 2000:
-            #     break
+            paper = {}
             cols = line.split('\t')
-            doi = clean_string(cols[1])
-            title =clean_string(cols[2])
-            author_name = clean_string(cols[3])
-            org_id = clean_string(cols[4])
-            org_name = clean_string(cols[5])
+            paper['doi'] = clean_string(cols[0])
+            authors = cols[1]
+            authors = authors[1:len(authors)-1].replace('\\"','"') # horrible replace of spqrl chars
+            try:
+                paper['author'] = json.loads(authors)
+            except json.decoder.JSONDecodeError:
+                print('skipping')
+                continue
+            paper['title'] = clean_string(cols[2])
+            paper['conf_name'] = clean_string(cols[3])
+            paper['conf_subtitle'] = clean_string(cols[4])
+            paper['rights'] = clean_string(cols[5])
             year = clean_string(cols[6])
-            conf_id = clean_string(cols[7])
-            conf_name = clean_string(cols[8])
-            conf_subtitle = clean_string(cols[9])
-
-            if doi not in papers.keys():
-                papers[doi] = {}
-                papers[doi]['doi'] = doi
-                papers[doi]['year'] = datetime.date(int(year), 1, 1)
-                papers[doi]['conf_id'] = conf_id
-                papers[doi]['conf_name'] = conf_name
-                papers[doi]['conf_subtitle'] = conf_subtitle
-                papers[doi]['authors'] = []
-                papers[doi]['authors'].append({'name': author_name, 'affiliations': org_name})
-            else:
-                papers[doi]['authors'].append({'name': author_name, 'affiliations': org_name})
-            
-            a += 1
+            paper['year'] = datetime.date(int(year), 1, 1)
     
-    # print(papers)
-    print('indexing')
-    for doi in papers.keys():
-        # print(papers[doi])
-        es.index(index=TARGET_INDEX, id=doi, doc_type=TARGET_INDEX, body=papers[doi])
+            es.index(index=TARGET_INDEX, id=paper['doi'], doc_type=TARGET_INDEX, body=paper)
 
 if __name__ == "__main__":
     main()
